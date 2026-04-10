@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>STUBLENDZ Barbershop</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body { margin: 0; font-family: Arial, sans-serif; background: #0f0f0f; color: white; }
+header { background: #111; padding: 20px; text-align: center; border-bottom: 2px solid gold; }
+h1 { color: gold; }
+.container { padding: 20px; max-width: 1000px; margin: auto; }
+.card { background: #1a1a1a; padding: 15px; margin: 10px 0; border-radius: 10px; }
+input, select, button, textarea { width: 100%; padding: 10px; margin: 5px 0; border-radius: 5px; border: none; }
+button { background: gold; color: black; font-weight: bold; cursor: pointer; }
+button:hover { background: #d4af37; }
+.slot { padding: 10px; background: #222; margin: 5px; cursor: pointer; border-radius: 5px; text-align: center; border:1px solid transparent; }
+.slot.taken { background: darkred; cursor: not-allowed; }
+.slot.selected { border:1px solid gold; background:#333; }
+#dashboard { display: none; }
+#loginBox { display: none; }
+.review { background:#222; padding:10px; margin:5px 0; border-radius:5px; }
+small { color: gray; }
+.notice { color: #0f0; }
+.error { color: #ff6b6b; }
+.action-btn { margin-top:5px; }
+</style>
+</head>
+
+<body>
+<header>
+    <h1>STUBLENDZ</h1>
+    <p>Fresh Cuts • Clean Fades • Professional Barbering</p>
+</header>
+
+<div class="container">
+
+<div class="card">
+    <h2>Book Appointment</h2>
+
+    <input id="name" placeholder="Your Name">
+    <input id="phone" placeholder="Phone Number">
+    <input type="date" id="date">
+
+    <select id="service">
+        <option>Haircut - $25</option>
+        <option>Fade + Beard - $35</option>
+        <option>Full Style - $45</option>
+        <option>VIP After Hours - $60</option>
+    </select>
+
+    <h3>Select Time</h3>
+    <div id="slots"></div>
+
+    <button onclick="book()">Book Appointment</button>
+    <p id="status"></p>
+
+    <h3>Cancel Your Booking</h3>
+    <input id="cancelId" placeholder="Booking ID">
+    <input id="cancelPhone" placeholder="Phone Number">
+    <button onclick="cancelBookingUser()">Cancel My Booking</button>
+</div>
+
+<div class="card">
+    <h2>Reviews</h2>
+    <textarea id="reviewText" placeholder="Leave a review"></textarea>
+    <button onclick="addReview()">Post Review</button>
+    <div id="reviews"></div>
+</div>
+
+<div class="card">
+    <h2>Owner Dashboard</h2>
+    <button onclick="showLogin()">Login</button>
+</div>
+
+<div id="loginBox" class="card">
+    <input id="adminPass" type="password" placeholder="Password">
+    <button onclick="login()">Login</button>
+</div>
+
+<div id="dashboard" class="card">
+    <h2>Bookings Dashboard</h2>
+    <div id="bookings"></div>
+</div>
+
+</div>
+
+<script>
+const slots = ["10AM","11AM","12PM","1PM","2PM","3PM","4PM","5PM","6PM"];
+let selectedTime = null;
+
+function showMessage(msg, isError=false){
+    const status = document.getElementById("status");
+    status.innerText = msg;
+    status.className = isError ? "error" : "notice";
+}
+
+function getBookings(){ return JSON.parse(localStorage.getItem("bookings") || "[]"); }
+function setBookings(b){ localStorage.setItem("bookings", JSON.stringify(b)); }
+
+function loadSlots(){
+    const container = document.getElementById("slots");
+    container.innerHTML = "";
+    let bookings = getBookings();
+    let date = document.getElementById("date").value;
+
+    slots.forEach(time=>{
+        let taken = bookings.find(b=>b.time===time && b.date===date);
+        let div = document.createElement("div");
+        div.className = "slot" + (taken ? " taken":"") + (selectedTime===time?" selected":"");
+        div.innerText = taken ? time + " (Taken)" : time;
+
+        if(!taken){ 
+            div.onclick = ()=>{
+                selectedTime=time; 
+                loadSlots();
+                showMessage("Selected " + time);
+            };
+        }
+        container.appendChild(div);
+    });
+}
+
+document.getElementById("date").addEventListener("change", loadSlots);
+
+function book(){
+    let name = document.getElementById("name").value.trim();
+    let phone = document.getElementById("phone").value.trim();
+    let service = document.getElementById("service").value;
+    let date = document.getElementById("date").value;
+
+    if(!name || !phone || !selectedTime || !date){ 
+        showMessage("Please fill everything", true); 
+        return; 
+    }
+
+    let bookings = getBookings();
+    if(bookings.find(b=>b.time===selectedTime && b.date===date)){
+        showMessage("Time already booked", true);
+        return;
+    }
+
+    let id = "STU" + Math.floor(Math.random()*99999);
+    bookings.push({id,name,phone,service,time:selectedTime,date,status:"pending"});
+    setBookings(bookings);
+
+    showMessage("Booking successful! ID: " + id);
+    selectedTime=null;
+    loadSlots();
+    loadDashboard();
+}
+
+function cancelBookingUser(){
+    let id = document.getElementById("cancelId").value.trim();
+    let phone = document.getElementById("cancelPhone").value.trim();
+
+    let bookings = getBookings();
+    let updated = bookings.filter(b => !(b.id===id && b.phone===phone));
+
+    if(updated.length === bookings.length){
+        showMessage("No booking found", true);
+    } else {
+        showMessage("Booking cancelled successfully");
+        setBookings(updated);
+        loadSlots();
+        loadDashboard();
+    }
+}
+
+function acceptBooking(id){
+    let bookings = getBookings();
+    bookings = bookings.map(b => b.id===id ? {...b, status:"accepted"} : b);
+    setBookings(bookings);
+    showMessage("Booking accepted");
+    loadDashboard();
+}
+
+function cancelBookingOwner(id){
+    let bookings = getBookings().filter(b => b.id!==id);
+    setBookings(bookings);
+    showMessage("Booking cancelled by owner");
+    loadDashboard();
+    loadSlots();
+}
+
+function addReview(){
+    let text = document.getElementById("reviewText").value.trim();
+    if(!text){
+        showMessage("Write something first", true);
+        return;
+    }
+
+    let reviews = JSON.parse(localStorage.getItem("reviews") || "[]");
+    reviews.push({text, date:new Date().toLocaleString()});
+    localStorage.setItem("reviews", JSON.stringify(reviews));
+
+    document.getElementById("reviewText").value="";
+    showMessage("Review posted");
+    loadReviews();
+}
+
+function loadReviews(){
+    let reviews = JSON.parse(localStorage.getItem("reviews") || "[]");
+    let box = document.getElementById("reviews");
+    box.innerHTML = "";
+
+    reviews.slice().reverse().forEach(r=>{
+        let div = document.createElement("div");
+        div.className = "review";
+        div.innerHTML = r.text + "<br><small>"+r.date+"</small>";
+        box.appendChild(div);
+    });
+}
+
+function showLogin(){ document.getElementById("loginBox").style.display="block"; }
+function login(){
+    if(document.getElementById("adminPass").value === "trapgod195"){
+        document.getElementById("dashboard").style.display="block";
+        showMessage("Logged in successfully");
+        loadDashboard();
+    } else showMessage("Wrong password", true);
+}
+
+function loadDashboard(){
+    let bookings = getBookings();
+    let box = document.getElementById("bookings");
+    box.innerHTML="";
+
+    bookings.forEach(b=>{
+        let div = document.createElement("div");
+        div.className="card";
+        div.innerHTML = `
+            <b>${b.name}</b><br>
+            ${b.date} - ${b.time}<br>
+            ${b.service}<br>
+            Status: ${b.status}<br>
+            ID: ${b.id}<br>
+            <button class="action-btn" onclick="acceptBooking('${b.id}')">Accept</button>
+            <button class="action-btn" onclick="cancelBookingOwner('${b.id}')">Cancel</button>
+        `;
+        box.appendChild(div);
+    });
+}
+
+loadSlots();
+loadReviews();
+
+console.assert(Array.isArray(getBookings()), "Bookings array works");
+console.assert(typeof acceptBooking === "function", "Accept fn exists");
+console.assert(typeof cancelBookingOwner === "function", "Owner cancel fn exists");
+console.assert(typeof book === "function", "Book function exists");
+</script>
+
+</body>
+</html>
